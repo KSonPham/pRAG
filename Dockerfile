@@ -13,7 +13,7 @@ RUN mkdir workspace
 WORKDIR /workspace
 
 RUN pip3 install fastapi uvicorn[standard] fsspec[http]==2023.1.0
-COPY nougat /workspace/nougat
+COPY nougat_edited /workspace/nougat
 WORKDIR /workspace/nougat
 
 RUN pip3 install fsspec==2023.5.0
