@@ -20,7 +20,7 @@ RUN pip3 install fsspec==2023.5.0
 RUN python3 setup.py install
 RUN pip3 install transformers==4.38.2
 RUN pip3 install albumentations==1.0.0
-
+RUN pip3 install python-multipart
 EXPOSE 8503
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8503"]

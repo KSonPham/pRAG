@@ -30,5 +30,35 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
+      # - "8000:8000"
     volumes:
       - ./qdrant_storage:/qdrant/storage:z
+
+# version: '3.8'
+
+# services:
+#   qdrant:
+#     image: qdrant/qdrant
+#     ports:
+#       - "6333:6333"
+#       - "6334:6334"
+#     volumes:
+#       - ./qdrant_storage:/qdrant/storage:z
+
+#   nougat:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile
+#     image: nougat
+#     runtime: nvidia  # Ensure you have NVIDIA runtime configured
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               count: all
+#               capabilities: [gpu]
+#     ports:
+#       - "8503:8503"
+#     stdin_open: true
+#     tty: true
