@@ -1,8 +1,10 @@
 from typing import Optional, Set
+import os
 from config import Config
 from qdrant_client import QdrantClient, models
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore
+from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 from langchain_ollama import OllamaLLM
 from unstructured.partition.pdf import partition_pdf
@@ -17,24 +19,15 @@ import requests
 from langchain_core.output_parsers import StrOutputParser
 import re
 from openai import OpenAI
+
 # Configure logging at the start of your project
 logging.basicConfig(
     level=logging.INFO,  # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log format
-    filename='app.log',  # Save logs to a file (optional)
-    filemode='a'  # Append mode ('w' to overwrite)
+    filename='database.log',  # Save logs to a file (optional)
+    filemode='w'  # Append mode ('w' to overwrite)
 )
 logger = logging.getLogger(__name__)
-# llm  = OllamaLLM(model=Config.LLM)
-# with open("temp.jpeg", "rb") as file:
-#     base64_image = base64.b64encode(file.read()).decode("utf-8")
-# response = ollama.generate(
-#     model="gemma3:12b",
-#     prompt="Write image caption please?",
-#     images=[base64_image]
-# )
-# print(response)
-
 
 def hash_lib_pdf(file_path: str) -> str:
     """Hash the PDF file to create a unique identifier"""
@@ -113,6 +106,8 @@ class VectorDatabase:
         for record in records:
             if record.payload["metadata"].get("binary_hash"):
                 hashes.add(record.payload["metadata"]["binary_hash"]) # Different chunking strategies may have different hash keys
+            elif record.payload.get("binary_hash"):
+                hashes.add(record.payload["binary_hash"])
             else:
                 hashes.add(record.payload["metadata"]["dl_meta"]["origin"]["binary_hash"])
         return hashes
@@ -360,11 +355,26 @@ class VectorDatabase:
         # )
         logger.info(f"Added {file_path} new documents to the collection: {collection} ")
 
-    def add_documents3(self, file_path: str, collection: str, export_type: ExportType = ExportType.DOC_CHUNKS) -> None:
-        url = "http://127.0.0.1:8503/predict/"
+    def add_documents3(self, file_path: str, collection: str) -> None:
+        
+        # Check if the collection exists
+        if not self._check_collection_exists(collection):
+            logger.error(f"Collection '{collection}' does not exist in Qdrant. Please create the collection first.")
+            raise ValueError(f"Collection '{collection}' does not exist in Qdrant. Please create the collection first.")
+        file_hash = hash_lib_pdf(file_path)
+        
+        # Check if the file already exists in the collection
+        existing_hashes = self._get_existing_hashes(collection)
+        if file_hash in existing_hashes:
+            logger.info(f"File '{file_path}' already exists in the collection '{collection}'. Skipping upload.")
+            return
+        
+        # Send the PDF file to the server for processing
+        url = f"{os.getenv('NOUGAT_URL')}/predict/"
         headers = {
             "accept": "application/json"
         }
+        
         # Open the PDF file in binary mode.
         with open(file_path, "rb") as pdf_file:
             files = {
@@ -372,91 +382,111 @@ class VectorDatabase:
             }
             response = requests.post(url, headers=headers, files=files)
 
-        # Print the JSON response from the server.
-        print(response.json())
-        markdown = response.json()
         # Save the markdown content to a file.
-        with open("output.md", "w") as md_file:
+        markdown = response.json()
+        with open(f".files/{file_hash}.md", "w") as md_file:
             md_file.write(markdown)
+        splitter = MarkdownHeaderTextSplitter(
+            headers_to_split_on=[
+                ("#", "Header_1"),
+                ("##", "Header_2"),
+                ("###", "Header_3"),
+            ],
+        )
+        splits = [split for split in splitter.split_text(markdown)]
+        import tqdm
+
+        # Create and persist a Qdrant vector database from the chunked documents
+        batch_size = 4
+        def chunker(iterable, n):
+            """Yield successive n-sized chunks from iterable."""
+            for i in range(0, len(iterable), n):
+                yield iterable[i:i + n]
+                
+        for b, batch in tqdm.tqdm(enumerate(chunker(splits, batch_size)), desc="Uploading documents"):
+            text = [doc.page_content for doc in batch]
+            metadata = [doc.metadata for doc in batch]
+            dense_embeddings = list(self.dense_embedding_model.passage_embed(text))
+            bm25_embeddings = list(self.bm25_embedding_model.passage_embed(text))
+            late_interaction_embeddings = list(self.late_interaction_embedding_model.passage_embed(text))
+            self.client.upload_points(
+                collection,
+                points=[
+                    models.PointStruct(
+                        id=int(b*batch_size + i),
+                        vector={
+                            "all-MiniLM-L6-v2": dense_embeddings[i].tolist(),
+                            "bm25": bm25_embeddings[i].as_object(),
+                            "colbertv2.0": late_interaction_embeddings[i].tolist(),
+                        },
+                        payload={
+                            "metadata": metadata[i],
+                            "text": text[i],
+                            "binary_hash": file_hash,
+                            "file_name": file_path
+                        }
+                    )
+                    for i, _ in enumerate(batch)
+                ],
+                batch_size=batch_size,  
+            )
+        logger.info(f"Added {file_path} new documents to the collection: {collection} ")
+        
         return 
         
 # Usage example
 if __name__ == "__main__":
-    # from dotenv import load_dotenv
-    # load_dotenv()
-
+    from dotenv import load_dotenv
+    load_dotenv()
+    collection_name = "rag"
     vector_db = VectorDatabase(
-        qdrant_url=Config.QDRANT_URL,
+        qdrant_url=os.getenv('QDRANT_URL'),
         embed_model_id=Config.EMBED_MODEL_ID
     )
-    vector_db.create_collection("rag2")
+    vector_db.create_collection(collection_name)
     vector_db.add_documents3(
         file_path="./data/2311-SMERF.04079v1.pdf",
-        collection="rag2",
-        export_type=ExportType.DOC_CHUNKS
+        collection=collection_name
     )
-    # vector_db.add_documents2(
-    #     file_path="./data/2311-SMERF.04079v1.pdf",
-    #     collection="rag2",
-    #     export_type=ExportType.DOC_CHUNKS
-    # )
-    # vector_db.add_documents(
-    #     file_path="./data/2311-SMERF.04079v1.pdf",
-    #     collection="rag2",
-    #     export_type=ExportType.DOC_CHUNKS
-    # )
-    
+
     ## Hybrid Search
     query_text = ["explain Polyline Sequence Representation in SMERF?"]
     dense_query_vector = next(vector_db.dense_embedding_model.query_embed(query_text))
     sparse_query_vector = next(vector_db.bm25_embedding_model.query_embed(query_text))
     late_query_vector = next(vector_db.late_interaction_embedding_model.query_embed(query_text))
-    # vector_db.client.query_points(
-    #     "rag2",
-    #     query=next(vector_db.dense_embedding_model.query_embed(query_text)),
-    #     using="all-MiniLM-L6-v2",
-    #     limit=10,
-    #     with_payload=True,
-    # )
+
     prefetch = [
         models.Prefetch(
             query=dense_query_vector,
             using="all-MiniLM-L6-v2",
-            limit=20,
+            limit=6,
         ),
         models.Prefetch(
             query=models.SparseVector(**sparse_query_vector.as_object()),
             using="bm25",
-            limit=20,
+            limit=6,
         ),
         models.Prefetch(
             query=late_query_vector,
             using="colbertv2.0",
-            limit=20,
+            limit=6,
         ),
     ]
     results = vector_db.client.query_points(
-            "rag2",
+            collection_name,
             prefetch=prefetch,
             query=models.FusionQuery(
-                fusion=models.Fusion.RRF,
+                fusion=models.Fusion.RRF, #https://medium.com/@devalshah1619/mathematical-intuition-behind-reciprocal-rank-fusion-rrf-explained-in-2-mins-002df0cc5e2a
             ),
             with_payload=True,
-            limit=5,
+            limit=3,
         )
-    # vectorstore = QdrantVectorStore.from_existing_collection(embedding="all-MiniLM-L6-v2", collection_name="rag2", url = Config.QDRANT_URL)
-    
-    # retriever = vectorstore.as_retriever()
-    # docs = retriever.invoke(
-    #     "explain Polyline Sequence Representation in SMERF?"
-    #     )
     dict = {
         str(point.id): point.score
         for point in results.points
     }
     point_id = [point.id for point in results.points]
-    points = vector_db.client.retrieve(collection_name="rag2", ids=point_id)
+    points = vector_db.client.retrieve(collection_name=collection_name, ids=point_id)
     for point in points:
         print(f"Point ID: {point.id}, Score: {dict[str(point.id)]}")
-        # print(point.payload["metadata"]["dl_meta"]["headings"])
         print(point.payload["text"])

@@ -2,3 +2,6 @@ qdrant_storage/*
 **.pyc
 *.log
 pdfs/*
+.files/*
+.chainlit/*
+.files/002f74bc-2366-42ff-bef9-770b6b2a0322/609a7ca8-1b43-4da7-8c1d-bff6cb9ddfae.pdf
