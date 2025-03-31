@@ -12,11 +12,11 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 RUN mkdir workspace
 WORKDIR /workspace
 
-RUN pip3 install fastapi uvicorn[standard] fsspec[http]==2023.1.0
+RUN pip3 install fastapi uvicorn[standard] fsspec[http]==2023.5.0
 COPY nougat_edited /workspace/nougat
 WORKDIR /workspace/nougat
-
-RUN pip3 install fsspec==2023.5.0
+RUN pip install pypdfium2==4.30.1
+# RUN pip3 install fsspec==2023.5.0
 RUN python3 setup.py install
 RUN pip3 install transformers==4.38.2
 RUN pip3 install albumentations==1.0.0

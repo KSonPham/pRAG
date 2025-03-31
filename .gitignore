@@ -1,2 +1,4 @@
 qdrant_storage/*
 **.pyc
+*.log
+pdfs/*

@@ -13,7 +13,7 @@ import logging
 from fastembed import TextEmbedding, LateInteractionTextEmbedding, SparseTextEmbedding
 import ollama
 from langchain.prompts import ChatPromptTemplate
-import base64
+import requests
 from langchain_core.output_parsers import StrOutputParser
 import re
 from openai import OpenAI
@@ -360,6 +360,26 @@ class VectorDatabase:
         # )
         logger.info(f"Added {file_path} new documents to the collection: {collection} ")
 
+    def add_documents3(self, file_path: str, collection: str, export_type: ExportType = ExportType.DOC_CHUNKS) -> None:
+        url = "http://127.0.0.1:8503/predict/"
+        headers = {
+            "accept": "application/json"
+        }
+        # Open the PDF file in binary mode.
+        with open(file_path, "rb") as pdf_file:
+            files = {
+                "file": (file_path, pdf_file, "application/pdf")
+            }
+            response = requests.post(url, headers=headers, files=files)
+
+        # Print the JSON response from the server.
+        print(response.json())
+        markdown = response.json()
+        # Save the markdown content to a file.
+        with open("output.md", "w") as md_file:
+            md_file.write(markdown)
+        return 
+        
 # Usage example
 if __name__ == "__main__":
     # from dotenv import load_dotenv
@@ -370,16 +390,21 @@ if __name__ == "__main__":
         embed_model_id=Config.EMBED_MODEL_ID
     )
     vector_db.create_collection("rag2")
+    vector_db.add_documents3(
+        file_path="./data/2311-SMERF.04079v1.pdf",
+        collection="rag2",
+        export_type=ExportType.DOC_CHUNKS
+    )
     # vector_db.add_documents2(
     #     file_path="./data/2311-SMERF.04079v1.pdf",
     #     collection="rag2",
     #     export_type=ExportType.DOC_CHUNKS
     # )
-    vector_db.add_documents(
-        file_path="./data/2311-SMERF.04079v1.pdf",
-        collection="rag2",
-        export_type=ExportType.DOC_CHUNKS
-    )
+    # vector_db.add_documents(
+    #     file_path="./data/2311-SMERF.04079v1.pdf",
+    #     collection="rag2",
+    #     export_type=ExportType.DOC_CHUNKS
+    # )
     
     ## Hybrid Search
     query_text = ["explain Polyline Sequence Representation in SMERF?"]
