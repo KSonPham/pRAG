@@ -5,18 +5,50 @@ from config import Config
 from db import VectorDatabase
 from agent import Agent
 import datetime
+from langchain.schema.runnable import Runnable, RunnablePassthrough, RunnableConfig, RunnableLambda, RunnableMap
+from langchain.schema import StrOutputParser
+from langchain.callbacks.base import BaseCallbackHandler
+from agent import ChatHistory
+import ray
+import asyncio
+from typing import List
+# if not ray.is_initialized():
+    
+# Add this helper function
+async def track_processing(futures: List[ray.ObjectRef], files: List[cl.File]):
+    """Track processing status of multiple files with streaming updates."""
+    tasks = []
+    
+    # Create a step for each file
+    for future, file in zip(futures, files):
+        task = asyncio.create_task(
+            track_single_file(future, file))
+        tasks.append(task)
+    
+    # Wait for all tracking to complete
+    await asyncio.gather(*tasks)
 
-class ChatHistory:
-    def __init__(self, limit=10):
-        self.history = []
-        self.limit = limit
-    
-    def add_message(self, message):
-        if len(self.history) >= self.limit:
-            self.history.pop(0)
-        self.history.append(message)
-    
-    
+async def track_single_file(future: ray.ObjectRef, file: cl.File):
+    """Track processing status of a single file with streaming updates."""
+    async with cl.Step(name=f"Processing {file.name}", type="processing") as step:
+        while True:
+            try:
+                # Check if processing is done with timeout
+                done, _ = ray.wait([future], timeout=0.1)
+                if done:
+                    result = ray.get(future)
+                    step.output = f"✅ Finished processing {file.name}"
+                    await step.update()
+                    break
+                else:
+                    step.output = f"⏳ Processing {file.name}..."
+                    await step.update()
+            except Exception as e:
+                step.output = f"❌ Error processing {file.name}: {str(e)}"
+                await step.update()
+                break
+            await asyncio.sleep(1)
+            
 # Create a password context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -56,24 +88,44 @@ async def on_chat_start():
             max_files=5,
         ).send()
     collection_name = f"{app_user.identifier}.collection"
+    if not ray.is_initialized():
+        ray.init()
 
-    vector_db = VectorDatabase(qdrant_url=os.getenv('QDRANT_URL'), embed_model_id=Config.EMBED_MODEL_ID)
+    vector_db = VectorDatabase.remote(qdrant_url=os.getenv('QDRANT_URL'), embed_model_id=Config.EMBED_MODEL_ID)
     agent = Agent(llm="gemma3:12b")
     # Init chat history
     cl.user_session.set("chat_history", ChatHistory(limit=10))
-    cl.user_session.set("agent", agent)
-    
+  
     # Create personal data collection
-    vector_db.create_collection(collection_name=collection_name)
-    cl.user_session.set("vector_db", vector_db)
-    cl.user_session.set("collection_name", collection_name)
-    # Wait for the user to upload a file
-    for file in files:
-        # Process the uploaded file
-        await cl.Message(content=f"Processing {file.name}...").send()
-        vector_db.add_documents3(file_path=file.path, collection=collection_name)
-        await cl.Message(content=f"Finished processing {file.name}...").send()
+    vector_db.create_collection.remote(collection_name=collection_name)
+        # Show initial processing message
+    initial_msg = await cl.Message(
+        content=f"Starting processing for {len(files)} files..."
+    ).send()
 
+    futures = [vector_db.add_documents3.remote(file.path, collection_name) for file in files]
+    # Wait for all tasks to complete
+        # Track processing with streaming updates
+    await track_processing(futures, files)
+    
+    # Update initial message when done
+    initial_msg.content = f"✅ Finished processing {len(files)} files!"
+    await initial_msg.update()
+    # await initial_msg.update(content=f"✅ Completed processing {len(files)} files!")
+    # await cl.Message(content=f"Finished processing {len(files)} files...").send()
+    runnable = (
+        RunnableMap({
+            "original_input": RunnablePassthrough(),
+            "vector_results": vector_db.get_context.remote
+        })
+        | RunnableLambda(lambda x: agent(
+            x["original_input"], 
+            vector_results=x["vector_results"],
+            chat_history=cl.user_session.get("chat_history")
+        ))
+        | StrOutputParser()
+    )
+    cl.user_session.set("runnable", runnable)
     
     # await cl.Message(f"Hello {app_user.identifier}, how can i help you today?").send()
     # elements = [
@@ -93,20 +145,27 @@ async def on_chat_start():
 async def on_message(message: cl.Message):
     msg_timestamp = datetime.datetime.now().isoformat()
     history = cl.user_session.get("chat_history")
-    prompt = message.content
-    agent = cl.user_session.get("agent")
-    vector_db = cl.user_session.get("vector_db")
-    collection_name = cl.user_session.get("collection_name")
-    response = agent(db=vector_db, prompt=prompt, collection=collection_name, chat_history=history)
+    # prompt = message.content
+    runnable = cl.user_session.get("runnable")
+    msg = cl.Message(content="")
+
+    async for chunk in runnable.astream(
+        message.content,
+        config=RunnableConfig(callbacks=[
+            cl.LangchainCallbackHandler(),
+        ]),
+    ):
+        await msg.stream_token(chunk)
+
+    await msg.send()
+
     history.add_message({
         "timestamp": msg_timestamp,
         "user": message.content,
-        "assistant": response
+        "assistant": msg.content,
     })    
     cl.user_session.set("chat_history", history)
-    # Send the response back to the user
-    await cl.Message(content=response).send()
-    
+
 
 if __name__ == "__main__":
     from chainlit.cli import run_chainlit

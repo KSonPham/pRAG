@@ -6,6 +6,16 @@ from qdrant_client import QdrantClient, models
 import os
 import re
 
+class ChatHistory:
+    def __init__(self, limit=10):
+        self.history = []
+        self.limit = limit
+    
+    def add_message(self, message):
+        if len(self.history) >= self.limit:
+            self.history.pop(0)
+        self.history.append(message)
+    
 
 class Agent:
     def __init__(self, llm:str):
@@ -21,7 +31,7 @@ class Agent:
         output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL).strip()
         return output
         
-    def __call__(self, db:VectorDatabase, prompt: str, collection:str, chat_history:list):
+    def __call__(self, db:VectorDatabase, prompt: str, collection:str, chat_history:ChatHistory):
         """Call the LLM with the prompt and database context."""
         planning_prompt = self.action_list_template.create_prompt({
             "query": prompt,
@@ -47,11 +57,11 @@ class Agent:
         
         return response
     
-    def chat_response(self, prompt:str, context:list, chat_history:list):
+    def chat_response(self, prompt:str, context:list, chat_history:ChatHistory):
         if len(context) == 0:
             response_prompt = self.simple_response_template.create_prompt({
                 "query": prompt,
-                "history": chat_history
+                "history": chat_history.history
             })
             response = self.llm.invoke(response_prompt).strip()
             if "deepseek" in self.llm_name:
@@ -60,7 +70,7 @@ class Agent:
             response_prompt = self.context_response_template.create_prompt({
                 "query": prompt,
                 "context": context,
-                "history": chat_history
+                "history": chat_history.history
             })
             response = self.llm.invoke(response_prompt).strip()
             if "deepseek" in self.llm_name:
