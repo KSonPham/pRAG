@@ -36,10 +36,7 @@ def hash_lib_pdf(file_path: str) -> str:
     with open(file_path, "rb") as f:
         while chunk := f.read(8192):
             hasher.update(chunk)
-    # return hasher.hexdigest()
-    return hashlib.md5(file_path.encode()).hexdigest()
-    # return hashlib.sha256(file_path.encode()).hexdigest()
-    # return hashlib.sha1(file_path.encode()).hexdigest()
+    return hasher.hexdigest()
 
 class VectorDatabase:
     def __init__(
@@ -438,7 +435,7 @@ class VectorDatabase:
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
-    collection_name = "rag"
+    collection_name = "admin.collection"
     vector_db = VectorDatabase(
         qdrant_url=os.getenv('QDRANT_URL'),
         embed_model_id=Config.EMBED_MODEL_ID
