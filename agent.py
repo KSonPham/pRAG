@@ -31,7 +31,7 @@ class Agent:
         output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL).strip()
         return output
         
-    def __call__(self, db:VectorDatabase, prompt: str, collection:str, chat_history:ChatHistory):
+    def __call__(self, prompt: str, db:VectorDatabase, collection:str, chat_history:ChatHistory):
         """Call the LLM with the prompt and database context."""
         planning_prompt = self.action_list_template.create_prompt({
             "query": prompt,
