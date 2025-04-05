@@ -3,15 +3,14 @@ import os
 from passlib.context import CryptContext
 from config import Config
 from db import VectorDatabase
-from agent import Agent
 import datetime
-from langchain.schema.runnable import Runnable, RunnablePassthrough, RunnableConfig, RunnableLambda, RunnableMap
-from langchain.schema import StrOutputParser
-from langchain.callbacks.base import BaseCallbackHandler
-from agent import ChatHistory
+from chain import create_runnable, ChatHistory
+from langchain.schema.runnable import RunnableConfig
 import ray
 import asyncio
 from typing import List
+if not ray.is_initialized():
+    ray.init()
 # if not ray.is_initialized():
     
 # Add this helper function
@@ -74,7 +73,6 @@ def auth_callback(username: str, password: str):
             )
     return None
 
-
 @cl.on_chat_start
 async def on_chat_start():
     app_user = cl.user_session.get("user")
@@ -88,11 +86,8 @@ async def on_chat_start():
             max_files=5,
         ).send()
     collection_name = f"{app_user.identifier}.collection"
-    if not ray.is_initialized():
-        ray.init()
 
     vector_db = VectorDatabase.remote(qdrant_url=os.getenv('QDRANT_URL'), embed_model_id=Config.EMBED_MODEL_ID)
-    agent = Agent(llm="gemma3:12b")
     # Init chat history
     cl.user_session.set("chat_history", ChatHistory(limit=10))
   
@@ -105,60 +100,52 @@ async def on_chat_start():
 
     futures = [vector_db.add_documents3.remote(file.path, collection_name) for file in files]
     # Wait for all tasks to complete
-        # Track processing with streaming updates
+    # Track processing with streaming updates
     await track_processing(futures, files)
-    
+
     # Update initial message when done
     initial_msg.content = f"✅ Finished processing {len(files)} files!"
     await initial_msg.update()
-    # await initial_msg.update(content=f"✅ Completed processing {len(files)} files!")
-    # await cl.Message(content=f"Finished processing {len(files)} files...").send()
-    runnable = (
-        RunnableMap({
-            "original_input": RunnablePassthrough(),
-            "vector_results": vector_db.get_context.remote
-        })
-        | RunnableLambda(lambda x: agent(
-            x["original_input"], 
-            vector_results=x["vector_results"],
-            chat_history=cl.user_session.get("chat_history")
-        ))
-        | StrOutputParser()
-    )
+   
+       # PDF display callback
+    # Store pdf_to_display in user session
+    cl.user_session.set("pdf_to_display", [])
+    
+    def pdf_callback(pdfs):
+        cl.user_session.set("pdf_to_display", pdfs)
+    
+    runnable = create_runnable("gemma3:12b", vector_db, collection_name, pdf_callback)
     cl.user_session.set("runnable", runnable)
     
-    # await cl.Message(f"Hello {app_user.identifier}, how can i help you today?").send()
-    # elements = [
-    #   cl.Pdf(name="pdf1", display="side", path="./data/2311-SMERF.04079v1.pdf", page=1) # page, side, inline
-    # ]
-    # # Reminder: The name of the pdf must be in the content of the message
-    # await cl.Message(content="Look at this local pdf1!", elements=elements).send()
-
-# @cl.on_chat_end
-# def end():
-#     # print("goodbye", cl.user_session.get("id"))
-#     client = cl.user_session.get("vector_db").client
-#     collection_name = cl.user_session.get("collection_name")
-#     client.delete_collection(collection_name=collection_name)
-
 @cl.on_message
 async def on_message(message: cl.Message):
     msg_timestamp = datetime.datetime.now().isoformat()
     history = cl.user_session.get("chat_history")
-    # prompt = message.content
     runnable = cl.user_session.get("runnable")
-    msg = cl.Message(content="")
+    
 
+    
+    # First response with the LLM answer
+    msg = cl.Message(content="")
     async for chunk in runnable.astream(
-        message.content,
+        {"query": message.content, "history": history.history},
         config=RunnableConfig(callbacks=[
             cl.LangchainCallbackHandler(),
         ]),
     ):
         await msg.stream_token(chunk)
-
     await msg.send()
+    
+    # Display any PDFs if needed
+    pdf_to_display = cl.user_session.get("pdf_to_display")
+    if pdf_to_display:
+        for pdf in pdf_to_display:
+            elements = [
+                cl.Pdf(name="pdf", display="side", path=pdf)
+            ]
+            await cl.Message(content=f"Here's the PDF: pdf", elements=elements).send()
 
+    # Save history
     history.add_message({
         "timestamp": msg_timestamp,
         "user": message.content,

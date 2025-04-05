@@ -19,6 +19,8 @@ import requests
 from langchain_core.output_parsers import StrOutputParser
 import re
 from openai import OpenAI
+import ray
+from promp_template import ContextTemplate
 
 # Configure logging at the start of your project
 logging.basicConfig(
@@ -38,6 +40,7 @@ def hash_lib_pdf(file_path: str) -> str:
             hasher.update(chunk)
     return hasher.hexdigest()
 
+@ray.remote
 class VectorDatabase:
     def __init__(
         self,
@@ -389,6 +392,7 @@ class VectorDatabase:
                 ("##", "Header_2"),
                 ("###", "Header_3"),
             ],
+            strip_headers=False
         )
         splits = [split for split in splitter.split_text(markdown)]
         import tqdm
@@ -429,61 +433,101 @@ class VectorDatabase:
             )
         logger.info(f"Added {file_path} new documents to the collection: {collection} ")
         
-        return 
-        
+        return
+    
+    def context_retrieval(self, prompt:str, collection:str):
+        """Retrieve context from the database."""
+        query_text = [prompt]
+        dense_query_vector = next(self.dense_embedding_model.query_embed(query_text))
+        sparse_query_vector = next(self.bm25_embedding_model.query_embed(query_text))
+        late_query_vector = next(self.late_interaction_embedding_model.query_embed(query_text))
+
+        prefetch = [
+            models.Prefetch(
+                query=dense_query_vector,
+                using="all-MiniLM-L6-v2",
+                limit=6,
+            ),
+            models.Prefetch(
+                query=models.SparseVector(**sparse_query_vector.as_object()),
+                using="bm25",
+                limit=6,
+            ),
+            models.Prefetch(
+                query=late_query_vector,
+                using="colbertv2.0",
+                limit=6,
+            ),
+        ]
+        results = self.client.query_points(
+                collection,
+                prefetch=prefetch,
+                query=models.FusionQuery(
+                    fusion=models.Fusion.RRF, #https://medium.com/@devalshah1619/mathematical-intuition-behind-reciprocal-rank-fusion-rrf-explained-in-2-mins-002df0cc5e2a
+                ),
+                with_payload=True,
+                limit=1,
+            )
+
+        point_id = [point.id for point in results.points]
+        scores = [point.score for point in results.points]
+        points = self.client.retrieve(collection_name=collection, ids=point_id)
+        context = []
+        pdfs = set()
+        for point, score in zip(points, scores):
+            template = ContextTemplate()
+            context.append(template.render({
+                "score": score,
+                "text": point.payload["text"]
+            }))
+            pdfs.add(point.payload["file_name"])
+        return context, pdfs
+    
 # Usage example
+# if __name__ == "__main__":
+#     from dotenv import load_dotenv
+#     load_dotenv()
+#     collection_name = "admin.collection"
+#     vector_db = VectorDatabase(
+#         qdrant_url=os.getenv('QDRANT_URL'),
+#         embed_model_id=Config.EMBED_MODEL_ID
+#     )
+#     vector_db.create_collection(collection_name)
+#     vector_db.add_documents3(
+#         file_path="./data/2311-SMERF.04079v1.pdf",
+#         collection=collection_name
+#     )
+
+#     ## Hybrid Search
+#     query_text = "explain Polyline Sequence Representation in SMERF?"
+#     context, pdfs = vector_db.context_retrieval(query_text, collection_name)
+#     print(context)
+#     print(pdfs)
+    ## Ray Actor Usage Example
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
+    ray.init()
+    
     collection_name = "admin.collection"
-    vector_db = VectorDatabase(
+    vector_db = VectorDatabase.remote(
         qdrant_url=os.getenv('QDRANT_URL'),
         embed_model_id=Config.EMBED_MODEL_ID
     )
-    vector_db.create_collection(collection_name)
-    vector_db.add_documents3(
+    
+    # Create collection
+    vector_db.create_collection.remote(collection_name)
+    
+    # Add documents 
+    vector_db.add_documents3.remote(
         file_path="./data/2311-SMERF.04079v1.pdf",
         collection=collection_name
     )
 
-    ## Hybrid Search
-    query_text = ["explain Polyline Sequence Representation in SMERF?"]
-    dense_query_vector = next(vector_db.dense_embedding_model.query_embed(query_text))
-    sparse_query_vector = next(vector_db.bm25_embedding_model.query_embed(query_text))
-    late_query_vector = next(vector_db.late_interaction_embedding_model.query_embed(query_text))
-
-    prefetch = [
-        models.Prefetch(
-            query=dense_query_vector,
-            using="all-MiniLM-L6-v2",
-            limit=6,
-        ),
-        models.Prefetch(
-            query=models.SparseVector(**sparse_query_vector.as_object()),
-            using="bm25",
-            limit=6,
-        ),
-        models.Prefetch(
-            query=late_query_vector,
-            using="colbertv2.0",
-            limit=6,
-        ),
-    ]
-    results = vector_db.client.query_points(
-            collection_name,
-            prefetch=prefetch,
-            query=models.FusionQuery(
-                fusion=models.Fusion.RRF, #https://medium.com/@devalshah1619/mathematical-intuition-behind-reciprocal-rank-fusion-rrf-explained-in-2-mins-002df0cc5e2a
-            ),
-            with_payload=True,
-            limit=3,
-        )
-    dict = {
-        str(point.id): point.score
-        for point in results.points
-    }
-    point_id = [point.id for point in results.points]
-    points = vector_db.client.retrieve(collection_name=collection_name, ids=point_id)
-    for point in points:
-        print(f"Point ID: {point.id}, Score: {dict[str(point.id)]}")
-        print(point.payload["text"])
+    # Hybrid Search
+    query_text = "explain Polyline Sequence Representation in SMERF?"
+    context, pdfs = ray.get(vector_db.context_retrieval.remote(query_text, collection_name))
+    print(context)
+    print(pdfs)
+    
+    # ray.shutdown()

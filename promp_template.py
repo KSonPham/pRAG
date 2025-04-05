@@ -28,8 +28,6 @@ class ActionListTemplate(PromptTemplate):
     def __init__(self):
         super().__init__(self.DEFAULT_CONFIG)
         
-    def create_prompt(self, context: Dict) -> str:
-        return self.render(context)
     
 class ContextAnalyserTemplate(PromptTemplate):
     DEFAULT_CONFIG = {
@@ -41,8 +39,6 @@ class ContextAnalyserTemplate(PromptTemplate):
     def __init__(self):
         super().__init__(self.DEFAULT_CONFIG)
         
-    def create_prompt(self, context: Dict) -> str:
-        return self.render(context)
     
 class SimpleResponseTemplate(PromptTemplate):
     DEFAULT_CONFIG = {
@@ -54,13 +50,11 @@ class SimpleResponseTemplate(PromptTemplate):
     def __init__(self):
         super().__init__(self.DEFAULT_CONFIG)
         
-    def create_prompt(self, context: Dict) -> str:
-        return self.render(context)
     
 class ContextResponseTemplate(PromptTemplate):
     DEFAULT_CONFIG = {
         "Query": "{query}",
-        "Instructions": "Given user query, context and chat history. Response appropriately to the query using the retrieved context from research papers.",
+        "Instructions": "Given user query, context and chat history. Response appropriately to the query using the retrieved context from research papers. If the user only ask to show pdf, return nothing.",
         "Context": "{context}",
         "History": "{history}"
     }
@@ -68,18 +62,13 @@ class ContextResponseTemplate(PromptTemplate):
     def __init__(self):
         super().__init__(self.DEFAULT_CONFIG)
         
-    def create_prompt(self, context: Dict) -> str:
-        return self.render(context)
     
 class ContextTemplate(PromptTemplate):
     DEFAULT_CONFIG = {
         "Relevant Score": "{score}",
-        "Structure": "{structure}",
         "Text": "{text}"
     }
     
     def __init__(self):
         super().__init__(self.DEFAULT_CONFIG)
         
-    def create_prompt(self, context: Dict) -> str:
-        return self.render(context)
