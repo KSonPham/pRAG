@@ -97,8 +97,8 @@ async def on_chat_start():
     initial_msg = await cl.Message(
         content=f"Starting processing for {len(files)} files..."
     ).send()
-
-    futures = [vector_db.add_documents3.remote(file.path, collection_name) for file in files]
+    
+    futures = [vector_db.add_documents.remote(file.path, collection_name) for file in files]
     # Wait for all tasks to complete
     # Track processing with streaming updates
     await track_processing(futures, files)
