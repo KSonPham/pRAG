@@ -34,31 +34,18 @@ services:
     volumes:
       - ./qdrant_storage:/qdrant/storage:z
 
-# version: '3.8'
+  postgres:
+    image: postgres:latest
+    container_name: postgres-container
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=admin.collection
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
-# services:
-#   qdrant:
-#     image: qdrant/qdrant
-#     ports:
-#       - "6333:6333"
-#       - "6334:6334"
-#     volumes:
-#       - ./qdrant_storage:/qdrant/storage:z
-
-#   nougat:
-#     build:
-#       context: .
-#       dockerfile: Dockerfile
-#     image: nougat
-#     runtime: nvidia  # Ensure you have NVIDIA runtime configured
-#     deploy:
-#       resources:
-#         reservations:
-#           devices:
-#             - driver: nvidia
-#               count: all
-#               capabilities: [gpu]
-#     ports:
-#       - "8503:8503"
-#     stdin_open: true
-#     tty: true
+volumes:
+  postgres_data:
