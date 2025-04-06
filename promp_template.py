@@ -67,7 +67,7 @@ class ContextTemplate(PromptTemplate):
     DEFAULT_CONFIG = {
         "Relevant Score": "{score}",
         "Title": "{title}",
-        "Structure": "{structure}",
+        # "Structure": "{structure}",
         "Text": "{text}"
     }
     

@@ -1,3 +1,4 @@
+import re
 from typing import Set
 import os
 from config import Config
@@ -127,7 +128,9 @@ class VectorDatabase:
             response = requests.post(url, headers=headers, files=files)
 
         # Save the markdown content to a file.
-        markdown = response.json()
+        result= response.json()
+        page_ranges = result['page_ranges']
+        markdown = result['content']
         with open(f".files/{file_hash}.md", "w") as md_file:
             md_file.write(markdown)
         splitter = MarkdownHeaderTextSplitter(
@@ -135,9 +138,35 @@ class VectorDatabase:
                 ("#", "Header_1"),
                 ("##", "Header_2"),
                 ("###", "Header_3"),
-            ]
+            ],
+            strip_headers=False
         )
         splits = [split for split in splitter.split_text(markdown)]
+        
+        total_lines = 0
+        print(f"Total lines in splits: {total_lines}")
+        current_line = 0
+        last_prev_page = 1
+        for split in splits:
+            current_range = [current_line, current_line + len(split.page_content.splitlines())]
+            total_lines += len(split.page_content.splitlines())
+            # Find which pages this split belongs to based on line ranges
+            split_pages = []
+            for page_num, (start_line, end_line) in page_ranges.items():
+                # Check if any part of the split overlaps with this page's line range
+                if not (current_range[1] < start_line or current_range[0] > end_line):
+                    split_pages.append(page_num)
+            
+            # Add page numbers to split metadata
+            if last_prev_page > int(split_pages[0]) and len(split_pages) > 1:
+                split_pages.remove(split_pages[0])
+            split.metadata["pages"] = split_pages
+            last_prev_page = int(split_pages[-1])
+            # Update current line count for next split
+            current_line += len(split.page_content.splitlines())
+            
+        for split in splits:
+            print(split.metadata["pages"])
         title = splits[0].metadata["Header_1"]
         # TODO: split data into smaller chunks (word based or semantic based), need reference to the original chunk
         # TODO: add page number to the metadata
@@ -226,7 +255,7 @@ class VectorDatabase:
                 "score": score,
                 "text": point.payload["text"],
                 "title": point.payload["title"],
-                "structure": point.payload["structure"]
+                # "structure": point.payload["structure"]
             }))
             pdfs.add(point.payload["file_name"])
         return context, pdfs
