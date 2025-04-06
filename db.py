@@ -140,8 +140,8 @@ class VectorDatabase:
         splits = [split for split in splitter.split_text(markdown)]
         title = splits[0].metadata["Header_1"]
         # TODO: split data into smaller chunks (word based or semantic based), need reference to the original chunk
-        # TODO: admin.collection
-        
+        # TODO: add page number to the metadata
+        # TODO: refine title
         import tqdm
 
         # Create and persist a Qdrant vector database from the chunked documents
