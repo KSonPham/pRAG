@@ -98,7 +98,7 @@ async def on_chat_start():
         content=f"Starting processing for {len(files)} files..."
     ).send()
     
-    futures = [vector_db.add_documents.remote(file.path, collection_name) for file in files]
+    futures = [vector_db.add_documents.remote(file, collection_name) for file in files]
     # Wait for all tasks to complete
     # Track processing with streaming updates
     await track_processing(futures, files)
@@ -122,8 +122,6 @@ async def on_message(message: cl.Message):
     msg_timestamp = datetime.datetime.now().isoformat()
     history = cl.user_session.get("chat_history")
     runnable = cl.user_session.get("runnable")
-    
-
     
     # First response with the LLM answer
     msg = cl.Message(content="")

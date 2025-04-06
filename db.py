@@ -1,25 +1,13 @@
-from typing import Optional, Set
+from typing import Set
 import os
 from config import Config
 from qdrant_client import QdrantClient, models
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-from langchain_qdrant import QdrantVectorStore
 from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
-from langchain_core.documents import Document
-from langchain_ollama import OllamaLLM
-from unstructured.partition.pdf import partition_pdf
-from docling.chunking import HybridChunker
-from langchain_docling.loader import ExportType, DoclingLoader
-from docling.document_converter import DocumentConverter
 import logging
 from fastembed import TextEmbedding, LateInteractionTextEmbedding, SparseTextEmbedding
-import ollama
-from langchain.prompts import ChatPromptTemplate
 import requests
-from langchain_core.output_parsers import StrOutputParser
-import re
-from openai import OpenAI
 import ray
+import chainlit as cl
 from promp_template import ContextTemplate
 
 # Configure logging at the start of your project
@@ -40,7 +28,7 @@ def hash_lib_pdf(file_path: str) -> str:
             hasher.update(chunk)
     return hasher.hexdigest()
 
-@ray.remote
+# @ray.remote
 class VectorDatabase:
     def __init__(
         self,
@@ -112,9 +100,8 @@ class VectorDatabase:
                 hashes.add(record.payload["metadata"]["dl_meta"]["origin"]["binary_hash"])
         return hashes
 
-    def add_documents(self, file_path: str, collection: str) -> None:
-        # TODO: change file_path to cl.File (file has a name)
-
+    def add_documents(self, file: cl.File, collection: str) -> None:
+        file_path = file.path
         # Check if the collection exists
         if not self._check_collection_exists(collection):
             logger.error(f"Collection '{collection}' does not exist in Qdrant. Please create the collection first.")
@@ -124,8 +111,7 @@ class VectorDatabase:
         # Check if the file already exists in the collection
         existing_hashes = self._get_existing_hashes(collection)
         if file_hash in existing_hashes:
-            logger.info(f"File '{file_path}' already exists in the collection '{collection}'. Skipping upload.")
-            return
+            logger.info(f"File '{file_path}' already exists in the collection '{collection}'. Updating the document.")
         
         # Send the PDF file to the server for processing
         url = f"{os.getenv('NOUGAT_URL')}/predict/"
@@ -149,14 +135,17 @@ class VectorDatabase:
                 ("#", "Header_1"),
                 ("##", "Header_2"),
                 ("###", "Header_3"),
-            ],
-            strip_headers=False
+            ]
         )
         splits = [split for split in splitter.split_text(markdown)]
+        title = splits[0].metadata["Header_1"]
+        # TODO: split data into smaller chunks (word based or semantic based), need reference to the original chunk
+        # TODO: admin.collection
+        
         import tqdm
 
         # Create and persist a Qdrant vector database from the chunked documents
-        batch_size = 4
+        batch_size = 8
         def chunker(iterable, n):
             """Yield successive n-sized chunks from iterable."""
             for i in range(0, len(iterable), n):
@@ -168,7 +157,7 @@ class VectorDatabase:
             dense_embeddings = list(self.dense_embedding_model.passage_embed(text))
             bm25_embeddings = list(self.bm25_embedding_model.passage_embed(text))
             late_interaction_embeddings = list(self.late_interaction_embedding_model.passage_embed(text))
-            self.client.upload_points(
+            result = self.client.upsert(
                 collection,
                 points=[
                     models.PointStruct(
@@ -182,16 +171,15 @@ class VectorDatabase:
                             "metadata": metadata[i],
                             "text": text[i],
                             "binary_hash": file_hash,
-                            "file_name": file_path
+                            "file_name": file.name,
+                            "file_path": file_path,
+                            "title": title
                         }
                     )
                     for i, _ in enumerate(batch)
                 ],
-                batch_size=batch_size,  
             )
-        logger.info(f"Added {file_path} new documents to the collection: {collection} ")
-        
-        return
+        return result
     
     def context_retrieval(self, prompt:str, collection:str):
         """Retrieve context from the database."""
@@ -236,56 +224,64 @@ class VectorDatabase:
             template = ContextTemplate()
             context.append(template.render({
                 "score": score,
-                "text": point.payload["text"]
+                "text": point.payload["text"],
+                "title": point.payload["title"],
+                "structure": point.payload["structure"]
             }))
             pdfs.add(point.payload["file_name"])
         return context, pdfs
     
 # Usage example
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+    collection_name = "admin.collection"
+    vector_db = VectorDatabase(
+        qdrant_url=os.getenv('QDRANT_URL'),
+        embed_model_id=Config.EMBED_MODEL_ID
+    )
+    vector_db.create_collection(collection_name)
+    import chainlit as cl
+    class File: 
+        def __init__(self, path: str, name: str):
+            self.path = path
+            self.name = name
+    file = File(path="./data/2311-SMERF.04079v1.pdf", name="2311-SMERF.04079v1.pdf")
+    vector_db.add_documents(
+        file,
+        collection=collection_name
+    )
+
+    ## Hybrid Search
+    query_text = "explain Polyline Sequence Representation in SMERF?"
+    context, pdfs = vector_db.context_retrieval(query_text, collection_name)
+    print(context)
+    print(pdfs)
+    ## Ray Actor Usage Example
 # if __name__ == "__main__":
 #     from dotenv import load_dotenv
 #     load_dotenv()
+#     ray.init()
+    
 #     collection_name = "admin.collection"
-#     vector_db = VectorDatabase(
+#     vector_db = VectorDatabase.remote(
 #         qdrant_url=os.getenv('QDRANT_URL'),
 #         embed_model_id=Config.EMBED_MODEL_ID
 #     )
-#     vector_db.create_collection(collection_name)
-#     vector_db.add_documents3(
+    
+#     # Create collection
+#     vector_db.create_collection.remote(collection_name)
+    
+#     # Add documents 
+#     vector_db.add_documents.remote(
 #         file_path="./data/2311-SMERF.04079v1.pdf",
 #         collection=collection_name
 #     )
 
-#     ## Hybrid Search
+#     # Hybrid Search
 #     query_text = "explain Polyline Sequence Representation in SMERF?"
-#     context, pdfs = vector_db.context_retrieval(query_text, collection_name)
+#     context, pdfs = ray.get(vector_db.context_retrieval.remote(query_text, collection_name))
 #     print(context)
 #     print(pdfs)
-    ## Ray Actor Usage Example
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
-    ray.init()
-    
-    collection_name = "admin.collection"
-    vector_db = VectorDatabase.remote(
-        qdrant_url=os.getenv('QDRANT_URL'),
-        embed_model_id=Config.EMBED_MODEL_ID
-    )
-    
-    # Create collection
-    vector_db.create_collection.remote(collection_name)
-    
-    # Add documents 
-    vector_db.add_documents.remote(
-        file_path="./data/2311-SMERF.04079v1.pdf",
-        collection=collection_name
-    )
-
-    # Hybrid Search
-    query_text = "explain Polyline Sequence Representation in SMERF?"
-    context, pdfs = ray.get(vector_db.context_retrieval.remote(query_text, collection_name))
-    print(context)
-    print(pdfs)
     
     # ray.shutdown()

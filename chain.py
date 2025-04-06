@@ -19,7 +19,6 @@ class ChatHistory:
         if len(self.history) >= self.limit:
             self.history.pop(0)
         self.history.append(message)
-    
 
 def create_runnable(llm: str, vector_db: VectorDatabase, collection_name: str, pdf_callback: Optional[Callable] = None):
     # Initialize LLM with streaming enabled
