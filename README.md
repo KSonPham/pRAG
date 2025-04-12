@@ -63,7 +63,6 @@ pRAG is an production-ready fully local question-answering system specifically d
    ![Parallel Processing](images/parallel_processing.png)
 4. Ask questions about the uploaded documents
    ![RAG with PDF Display](images/Rag+showpdf.png)
-5. View relevant PDF sections and generated answers
 
 ## Security Notes
 
