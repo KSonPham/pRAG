@@ -114,7 +114,7 @@ async def on_chat_start():
     def pdf_callback(pdfs):
         cl.user_session.set("pdf_to_display", pdfs)
     
-    runnable = create_runnable("gemma3:12b", vector_db, collection_name, pdf_callback)
+    runnable = create_runnable(Config.LLM, vector_db, collection_name, pdf_callback)
     cl.user_session.set("runnable", runnable)
     
 @cl.on_message

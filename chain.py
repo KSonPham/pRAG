@@ -121,7 +121,7 @@ if __name__ == "__main__":
     def pdf_callback(pdfs):
         global pdf_to_display
         pdf_to_display = pdfs
-    runnable = create_runnable("gemma3:12b", vector_db, "admin.collection", pdf_callback)
+    runnable = create_runnable(Config.LLM, vector_db, "admin.collection", pdf_callback)
     query = "show me pdf?"
     response = runnable.invoke({"query": query})
     print("Regular response:", response)

@@ -6,7 +6,7 @@ load_dotenv()  # Load environment variables from .env file
 
 class Config:
     EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-    LLM = "deepseek-r1:8b"
+    LLM = "gemma3:12b"
     EXPORT_TYPE = ExportType.DOC_CHUNKS
     RAY_ADDRESS = "auto"
     #PWD = '$2b$12$C6NurfvKnwkQSyi//CGBIu4KFCtidItSb8wLLYoF2lfGaViEKwTbe'
@@ -22,9 +22,5 @@ class Config:
     DEEPSEEK_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
     ALIBABA_API_KEY: str = ""
-
-
-    
-    
 
 config = Config()
