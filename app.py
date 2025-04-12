@@ -87,7 +87,7 @@ async def on_chat_start():
         ).send()
     collection_name = f"{app_user.identifier}.collection"
 
-    vector_db = VectorDatabase.remote(qdrant_url=os.getenv('QDRANT_URL'), embed_model_id=Config.EMBED_MODEL_ID)
+    vector_db = VectorDatabase.remote(qdrant_url=Config.QDRANT_URL, embed_model_id=Config.EMBED_MODEL_ID)
     # Init chat history
     cl.user_session.set("chat_history", ChatHistory(limit=10))
   
@@ -139,9 +139,9 @@ async def on_message(message: cl.Message):
     if pdf_to_display:
         for pdf in pdf_to_display:
             elements = [
-                cl.Pdf(name="pdf", display="side", path=pdf)
+                cl.Pdf(name=pdf[1], display="side", path=pdf[0])
             ]
-            await cl.Message(content=f"Here's the PDF: pdf", elements=elements).send()
+            await cl.Message(content=f"Here's the PDF: {pdf[1]}", elements=elements).send()
 
     # Save history
     history.add_message({

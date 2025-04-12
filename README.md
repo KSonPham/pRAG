@@ -1,18 +1,81 @@
 # pRAG
 
-pRAG is a project designed to facilitate question-answering within scientific documentation, making it an invaluable tool for students working on essays, research papers, or theses. By leveraging advanced retrieval and generation techniques, pRAG enables users to efficiently extract relevant information from extensive academic sources, streamlining the research and writing process.
+pRAG is an advanced fully local question-answering system specifically designed for scientific documentation. It leverages state-of-the-art retrieval-augmented generation (RAG) techniques to help students, researchers, and academics efficiently extract and synthesize information from academic papers and documents.
 
 ## Features
 
-- **Database Management**: Scripts and configurations for managing the database ([`db.py`](db.py), [`start_db.sh`](start_db.sh)).
-- **Application Logic**: Core application logic implemented in [`app.py`](app.py).
-- **Configuration**: Centralized configuration management in [`config.py`](config.py).
-- **Docker Support**: Dockerized setup with [`Dockerfile`](Dockerfile) and [`docker-compose.yml`](docker-compose.yml).
-- **Chainlit Integration**: Chainlit configuration in [`.chainlit/`](.chainlit/).
+- **Document Processing**: Upload and process multiple PDF files simultaneously with RAY
+- **Advanced RAG Pipeline**: 
+  - Vector-based document retrieval using Qdrant
+  - Context-aware response generation
+  - PDF content display and reference
+- **User Authentication**: Secure admin access with password protection
+- **VectorDB**: Using Qdrant with docker to avoid InMemory
+- **Chat Interface**: Interactive chat-based interface powered by Chainlit
+- **Multi-Model Support**: Integration with various LLM providers (DeepSeek, OpenAI, Google)
+- **Docker Support**: Containerized deployment with Docker and docker-compose
 
-## Things To Try:
-- **Metadata Filtering**: Exclude queries based on document names to refine search results.  
-- **Advanced Retrieval**: Implement a "small-to-big" approach—generate smaller chunks by summarizing or semantically segmenting larger sections. Use these smaller chunks for retrieval and leverage the full chunks for synthesis.  
-- **Multi-Document Agents**: Enable fact-based question answering and summarization across multiple documents. Develop an agent that selects relevant documents, applies metadata filtering, and then processes the information accordingly.  
+## Project Structure
 
-<!-- ## Project Structure -->
+- **Core Components**:
+  - `app.py`: Main application logic and Chainlit interface
+  - `db.py`: Vector database management and document processing
+  - `config.py`: Configuration management and API keys
+  - `chain.py`: RAG pipeline implementation
+
+
+## Setup
+
+1. **Prerequisites**:
+   - Docker and Docker Compose
+   - Python 3.8+
+   - NVIDIA GPU
+
+2. **Environment Setup**:
+   ```bash
+   # Clone the repository
+   git clone [repository-url]
+   cd pRAG
+
+   # Create .env file with required environment variables
+   cp .env.example .env
+   # Edit .env with your chainlit security key
+   ```
+
+3. **Docker Deployment**:
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Local Development**:
+   ```bash
+   pip install -r requirements.txt
+   python app.py
+   ```
+
+## Usage
+
+1. Access the application through your web browser
+2. Log in with admin/admin credentials
+3. Upload PDF documents for processing
+4. Ask questions about the uploaded documents
+5. View relevant PDF sections and generated answers
+
+## Security Notes
+
+- The application uses bcrypt for password hashing
+- API keys are stored in the configuration file
+- Admin access is protected by password authentication
+
+## Advanced Features
+
+- **Multi-Document Analysis**: Cross-document question answering
+- **Context-Aware Responses**: Intelligent context retrieval and synthesis
+- **PDF Display**: Interactive PDF viewing with relevant sections highlighted
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+
+

@@ -29,7 +29,7 @@ def hash_lib_pdf(file_path: str) -> str:
             hasher.update(chunk)
     return hasher.hexdigest()
 
-# @ray.remote
+@ray.remote
 class VectorDatabase:
     def __init__(
         self,
@@ -115,7 +115,7 @@ class VectorDatabase:
             logger.info(f"File '{file_path}' already exists in the collection '{collection}'. Updating the document.")
         
         # Send the PDF file to the server for processing
-        url = f"{os.getenv('NOUGAT_URL')}/predict/"
+        url = f"{Config.NOUGAT_URL}/predict/"
         headers = {
             "accept": "application/json"
         }
@@ -165,8 +165,8 @@ class VectorDatabase:
             # Update current line count for next split
             current_line += len(split.page_content.splitlines())
             
-        for split in splits:
-            print(split.metadata["pages"])
+        # for split in splits:
+        #     print(split.metadata["pages"])
         title = splits[0].metadata["Header_1"]
         # TODO: split data into smaller chunks (word based or semantic based), need reference to the original chunk
         # TODO: add page number to the metadata
@@ -257,7 +257,7 @@ class VectorDatabase:
                 "title": point.payload["title"],
                 # "structure": point.payload["structure"]
             }))
-            pdfs.add(point.payload["file_name"])
+            pdfs.add((point.payload["file_path"], point.payload["file_name"]))
         return context, pdfs
     
 # Usage example
@@ -266,7 +266,7 @@ if __name__ == "__main__":
     load_dotenv()
     collection_name = "admin.collection"
     vector_db = VectorDatabase(
-        qdrant_url=os.getenv('QDRANT_URL'),
+        qdrant_url=Config.QDRANT_URL,
         embed_model_id=Config.EMBED_MODEL_ID
     )
     vector_db.create_collection(collection_name)
@@ -294,7 +294,7 @@ if __name__ == "__main__":
     
 #     collection_name = "admin.collection"
 #     vector_db = VectorDatabase.remote(
-#         qdrant_url=os.getenv('QDRANT_URL'),
+#         qdrant_url=Config.QDRANT_URL,
 #         embed_model_id=Config.EMBED_MODEL_ID
 #     )
     

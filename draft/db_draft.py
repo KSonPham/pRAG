@@ -371,7 +371,7 @@ class VectorDatabase:
             return
         
         # Send the PDF file to the server for processing
-        url = f"{os.getenv('NOUGAT_URL')}/predict/"
+        url = f"{Config.NOUGAT_URL}/predict/"
         headers = {
             "accept": "application/json"
         }
@@ -490,7 +490,7 @@ class VectorDatabase:
 #     load_dotenv()
 #     collection_name = "admin.collection"
 #     vector_db = VectorDatabase(
-#         qdrant_url=os.getenv('QDRANT_URL'),
+#         qdrant_url=Config.QDRANT_URL,
 #         embed_model_id=Config.EMBED_MODEL_ID
 #     )
 #     vector_db.create_collection(collection_name)
@@ -512,7 +512,7 @@ if __name__ == "__main__":
     
     collection_name = "admin.collection"
     vector_db = VectorDatabase.remote(
-        qdrant_url=os.getenv('QDRANT_URL'),
+        qdrant_url=Config.QDRANT_URL,
         embed_model_id=Config.EMBED_MODEL_ID
     )
     

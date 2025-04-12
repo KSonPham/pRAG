@@ -113,7 +113,7 @@ if __name__ == "__main__":
     
     # Initialize vector database
     vector_db = VectorDatabase.remote(
-        qdrant_url=os.getenv('QDRANT_URL'),
+        qdrant_url=Config.QDRANT_URL,
         embed_model_id=Config.EMBED_MODEL_ID
     )
 
