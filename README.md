@@ -1,6 +1,6 @@
 # pRAG
 
-pRAG is an advanced fully local question-answering system specifically designed for scientific documentation. It leverages state-of-the-art retrieval-augmented generation (RAG) techniques to help students, researchers, and academics efficiently extract and synthesize information from academic papers and documents.
+pRAG is an production-ready fully local question-answering system specifically designed scientific documentation. It leverages state-of-the-art retrieval-augmented generation (RAG) techniques to help students, researchers, and academics efficiently extract and synthesize information from academic papers and documents.
 
 ## Features
 
@@ -10,7 +10,7 @@ pRAG is an advanced fully local question-answering system specifically designed 
   - Context-aware response generation
   - PDF content display and reference
 - **User Authentication**: Secure admin access with password protection
-- **VectorDB**: Using Qdrant with docker to avoid InMemory
+- **VectorDB**: Using Qdrant with docker to avoid InMemory 
 - **Chat Interface**: Interactive chat-based interface powered by Chainlit
 - **Multi-Model Support**: Integration with various LLM providers (DeepSeek, OpenAI, Google)
 - **Docker Support**: Containerized deployment with Docker and docker-compose
@@ -23,7 +23,6 @@ pRAG is an advanced fully local question-answering system specifically designed 
   - `config.py`: Configuration management and API keys
   - `chain.py`: RAG pipeline implementation
 
-
 ## Setup
 
 1. **Prerequisites**:
@@ -34,11 +33,13 @@ pRAG is an advanced fully local question-answering system specifically designed 
 2. **Environment Setup**:
    ```bash
    # Clone the repository
-   git clone [repository-url]
+   git clone https://github.com/KSonPham/pRAG.git
    cd pRAG
 
    # Create .env file with required environment variables
    cp .env.example .env
+   # Create chainlit-secret:
+   chainlit create-secret
    # Edit .env with your chainlit security key
    ```
 
@@ -57,8 +58,11 @@ pRAG is an advanced fully local question-answering system specifically designed 
 
 1. Access the application through your web browser
 2. Log in with admin/admin credentials
+   ![Login Interface](images/login.png)
 3. Upload PDF documents for processing
+   ![Parallel Processing](images/parallel_processing.png)
 4. Ask questions about the uploaded documents
+   ![RAG with PDF Display](images/Rag+showpdf.png)
 5. View relevant PDF sections and generated answers
 
 ## Security Notes
